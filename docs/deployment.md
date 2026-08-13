@@ -81,6 +81,9 @@ docker compose restart mail
 ## 接口说明
 
 - 健康检查：`GET http://<IP>/health`（经 nginx）
-- 发送邮件：`POST http://<IP>/send`，请求头 `X-API-Key: <token>`，
+- 通用发送：`POST http://<IP>/send`，请求头 `X-API-Key: <token>`，
   请求体 `{"subject":"标题","content":"正文","html":false}`
-- 默认收件人为 `MAIL_RECIPIENT` 指定地址；可在请求体加 `"to": "xxx@example.com"` 临时改收件人。
+- 预约表单：`POST http://<IP>/appointment`，请求头 `X-API-Key: <token>`，
+  请求体包含 `name`、`company`、`phone`、`email`、`companyType`、`requirement`
+- `/api/appointment` 是预约接口的兼容路径
+- 预约表单的 `email` 是收件邮箱；不填写时使用 `MAIL_RECIPIENT`，默认发送到 `qykjlab@163.com`

@@ -5,6 +5,7 @@ import json
 import logging
 import smtplib
 import ssl
+import re
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -21,6 +22,7 @@ API_KEYS = set(k.strip() for k in os.environ.get("MAIL_API_KEYS", "").split(",")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("mailservice")
+EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
 
 def send_email(to, subject, content, html=False):
@@ -39,11 +41,56 @@ def send_email(to, subject, content, html=False):
     return True
 
 
+def first_value(data, *names):
+    for name in names:
+        value = data.get(name)
+        if value is not None:
+            return str(value).strip()
+    return ""
+
+
+def build_appointment(data):
+    """Validate the demo request form and turn it into an email payload."""
+    name = first_value(data, "name", "姓名")
+    company = first_value(data, "company", "companyName", "unitName", "单位名称")
+    phone = first_value(data, "phone", "mobile", "手机号")
+    recipient = first_value(data, "email", "to", "recipient", "邮箱") or DEFAULT_RECIPIENT
+    company_type = first_value(data, "companyType", "unitType", "type", "单位类型")
+    requirement = first_value(data, "requirement", "description", "demand", "需求简述")
+
+    missing = [label for value, label in (
+        (name, "name"), (company, "company"), (phone, "phone")
+    ) if not value]
+    if missing:
+        raise ValueError("missing required fields: " + ", ".join(missing))
+    if not EMAIL_PATTERN.fullmatch(recipient):
+        raise ValueError("email must be a valid email address")
+    if len(name) > 100 or len(company) > 200 or len(phone) > 40:
+        raise ValueError("name, company or phone is too long")
+    if len(company_type) > 100 or len(requirement) > 5000:
+        raise ValueError("companyType or requirement is too long")
+
+    content = "\n".join((
+        "预约产品演示表单",
+        "=" * 24,
+        f"姓名：{name}",
+        f"单位名称：{company}",
+        f"手机号：{phone}",
+        f"邮箱：{recipient}",
+        f"单位类型：{company_type or '未填写'}",
+        f"需求简述：{requirement or '未填写'}",
+    ))
+    return recipient, f"预约产品演示 - {name} - {company}", content
+
+
 class Handler(BaseHTTPRequestHandler):
     def _send_json(self, code, obj):
         body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-API-Key")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -57,7 +104,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlparse(self.path).path
-        if path != "/send":
+        if path not in ("/send", "/appointment", "/api/appointment"):
             self._send_json(404, {"error": "not found"})
             return
         if API_KEYS:
@@ -74,10 +121,18 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:
             self._send_json(400, {"error": "invalid json"})
             return
-        subject = str(data.get("subject", "")).strip()
-        content = data.get("content", "")
-        html = bool(data.get("html", False))
-        to = str(data.get("to", DEFAULT_RECIPIENT)).strip()
+        if path in ("/appointment", "/api/appointment"):
+            try:
+                to, subject, content = build_appointment(data)
+            except ValueError as e:
+                self._send_json(400, {"error": str(e)})
+                return
+            html = False
+        else:
+            subject = str(data.get("subject", "")).strip()
+            content = data.get("content", "")
+            html = bool(data.get("html", False))
+            to = str(data.get("to", DEFAULT_RECIPIENT)).strip()
         if not subject or not content or not to:
             self._send_json(400, {"error": "subject, content and to are required"})
             return
@@ -91,6 +146,9 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:
             log.exception("send failed")
             self._send_json(502, {"error": "send failed", "detail": str(e)})
+
+    def do_OPTIONS(self):
+        self._send_json(204, {})
 
     def log_message(self, fmt, *args):
         log.info("%s - %s", self.address_string(), fmt % args)

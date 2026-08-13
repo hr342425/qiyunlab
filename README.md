@@ -6,7 +6,7 @@
 ## 功能
 
 - 纯 Python 标准库实现，无第三方依赖，镜像极简
-- HTTP 接口：`GET /health`、`POST /send`
+- HTTP 接口：`GET /health`、`POST /send`、`POST /appointment`
 - API Key 鉴权，防止开放转发被滥用
 - Docker 化 + 一键部署（参考 yiduo 部署方案，国内网络使用 githubfast 加速）
 
@@ -28,11 +28,24 @@ python3 app/mailservice.py
 ## 调用示例
 
 ```bash
-curl -X POST http://<服务器IP>:8080/send \
+curl -X POST http://<服务器IP>/appointment \
   -H 'Content-Type: application/json' \
   -H 'X-API-Key: <你的密钥>' \
-  -d '{"subject":"测试","content":"你好","html":false}'
+  -d '{
+    "name":"张三",
+    "company":"某某公司",
+    "phone":"13800138000",
+    "email":"",
+    "companyType":"施工企业",
+    "requirement":"希望预约产品演示"
+  }'
 ```
+
+`/appointment` 对应前端预约产品演示表单。`name`、`company`、`phone` 必填；
+`email` 是收件邮箱，不填写时使用服务器 `.env` 中的 `MAIL_RECIPIENT`（默认
+`qykjlab@163.com`）。表单内容会整理成邮件正文发送。
+
+字段别名也兼容：`姓名`、`单位名称`、`手机号`、`邮箱`、`单位类型`、`需求简述`。
 
 ## 安全说明
 
