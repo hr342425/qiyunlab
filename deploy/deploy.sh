@@ -4,7 +4,6 @@ set -euo pipefail
 APP_DIR="${APP_DIR:-/opt/qiyunlab/app}"
 BRANCH="${BRANCH:-main}"
 FORCE_SYNC="${FORCE_SYNC:-0}"
-HEALTH_URL="${HEALTH_URL:-http://127.0.0.1/health}"
 
 log() {
   printf '[deploy] %s\n' "$*"
@@ -17,6 +16,14 @@ if [ "$FORCE_SYNC" != "0" ] && [ "$FORCE_SYNC" != "1" ]; then
 fi
 
 cd "$APP_DIR"
+
+# 读取 .env（render-nginx 与健康检查需要 MAIL_HTTPS 等）
+if [ -f .env ]; then
+  set -a
+  # shellcheck disable=SC1091
+  source .env
+  set +a
+fi
 
 log "syncing code from origin/$BRANCH"
 git fetch origin "$BRANCH"
@@ -42,10 +49,23 @@ docker compose build mail nginx
 log "starting containers"
 docker compose up -d --remove-orphans
 
+# nginx 配置是 bind mount：镜像不变时 up 不会重建容器，需 reload 让新配置生效
+log "reloading nginx to apply config"
+docker compose exec -T nginx nginx -s reload || log "nginx reload skipped (container not ready yet)"
+
+# 健康检查：HTTPS 模式下用 https + 忽略证书校验（127.0.0.1 不匹配域名证书）
+if [ "${MAIL_HTTPS:-0}" = "1" ]; then
+  HEALTH_URL="${HEALTH_URL:-https://127.0.0.1/healthz}"
+  CURL_EXTRA=(-k)
+else
+  HEALTH_URL="${HEALTH_URL:-http://127.0.0.1/healthz}"
+  CURL_EXTRA=()
+fi
+
 log "checking health: $HEALTH_URL"
 for attempt in $(seq 1 20); do
-  if curl -fsS "$HEALTH_URL" >/dev/null; then
-    log "deploy complete. branch=$BRANCH force_sync=$FORCE_SYNC"
+  if curl -fsS "${CURL_EXTRA[@]}" "$HEALTH_URL" >/dev/null; then
+    log "deploy complete. branch=$BRANCH force_sync=$FORCE_SYNC https=${MAIL_HTTPS:-0}"
     exit 0
   fi
   sleep 1
