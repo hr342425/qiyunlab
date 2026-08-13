@@ -1,0 +1,12 @@
+# ---- Stage 1: 构建前端 (qyweb / develop) ----
+FROM node:20-alpine AS frontend-build
+WORKDIR /build
+COPY frontend/package*.json ./
+RUN npm config set registry https://registry.npmmirror.com && npm install
+COPY frontend/ ./
+RUN npm run build
+
+# ---- Stage 2: Nginx 托管前端 + 反代邮件服务 ----
+FROM nginx:1.27-alpine
+COPY deploy/nginx.conf.template /etc/nginx/templates/default.conf.template
+COPY --from=frontend-build /build/dist /usr/share/nginx/html

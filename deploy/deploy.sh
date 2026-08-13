@@ -32,8 +32,8 @@ else
   git pull --ff-only origin "$BRANCH"
 fi
 
-log "building mail image"
-docker compose build mail
+log "building images (mail + nginx)"
+docker compose build mail nginx
 
 log "starting containers"
 docker compose up -d --remove-orphans

@@ -12,12 +12,15 @@ services:
       - .env
 
   nginx:
-    image: nginx:1.27-alpine
+    build:
+      context: .
+      dockerfile: Dockerfile.nginx
+    image: ${QIYUNLAB_NGINX_IMAGE:-qiyunlab-nginx:latest}
     container_name: ${QIYUNLAB_NGINX_CONTAINER_NAME:-qiyunlab-nginx}
     restart: unless-stopped
     depends_on:
       - mail
     ports:
       - "80:80"
-    volumes:
-      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    environment:
+      - MAIL_API_KEY=${MAIL_API_KEY:-}

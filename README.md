@@ -1,13 +1,14 @@
-# qiyunlab - 轻量邮件发送服务
+# qiyunlab - 官网 + 轻量邮件发送服务
 
-部署在云服务器上的轻量邮箱发送服务。前端通过 HTTP 调用本服务，使用 163 SMTP
-将邮件发送到指定邮箱。
+部署在云服务器上的官网与邮件发送服务：Nginx 托管前端静态页面，并把表单请求反代到
+内网邮件服务，使用 163 SMTP 将邮件发送到指定邮箱。
 
 ## 功能
 
 - 纯 Python 标准库实现，无第三方依赖，镜像极简
-- HTTP 接口：`GET /health`、`POST /send`、`POST /appointment`
-- API Key 鉴权，防止开放转发被滥用
+- Nginx 托管 qyweb 前端（`frontend/`），并反代 `/appointment` 到内网邮件服务
+- HTTP 接口：`GET /health`、`POST /appointment`
+- 方案 A 密钥管理：前端不携带密钥，Nginx 服务端注入 `X-API-Key`，后端端口不暴露公网
 - Docker 化 + 一键部署（参考 yiduo 部署方案，国内网络使用 githubfast 加速）
 
 ## 快速开始（本地）
@@ -27,10 +28,11 @@ python3 app/mailservice.py
 
 ## 调用示例
 
+前端通过同源 `/appointment` 提交（Nginx 会自动注入密钥）。直接调用接口时：
+
 ```bash
 curl -X POST http://<服务器IP>/appointment \
   -H 'Content-Type: application/json' \
-  -H 'X-API-Key: <你的密钥>' \
   -d '{
     "name":"张三",
     "company":"某某公司",
@@ -82,5 +84,7 @@ curl -X POST http://<服务器IP>/appointment \
 
 ## 安全说明
 
-所有密钥（SMTP 授权码、API Key 等）存放在服务器上的 `.env`（权限 600），
-**不要**提交到 git 仓库。仓库内只保留 `.env.example` 占位模板。
+- 所有密钥（SMTP 授权码、API Key 等）存放在服务器上的 `.env`（权限 600），
+  **不要**提交到 git 仓库。仓库内只保留 `.env.example` 占位模板。
+- 前端源码中的 API Key 已移除（公开前端携带密钥没有安全意义），改为 Nginx 服务端注入。
+- 邮件服务端口不映射到公网，只能经 Nginx 访问。

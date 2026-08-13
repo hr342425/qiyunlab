@@ -74,11 +74,10 @@ async function submitApplication() {
 
   submitting.value = true
   try {
-    const response = await fetch('http://101.133.159.247/appointment', {
+    const response = await fetch('/appointment', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-API-Key': '<YOUR_API_KEY>',
       },
       body: JSON.stringify({ ...form }),
     })

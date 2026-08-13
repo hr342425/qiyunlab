@@ -1,0 +1,49 @@
+# 限流：同一 IP 限速（防表单刷垃圾邮件）。放在 http 上下文（conf.d 在 http 内）
+limit_req_zone $binary_remote_addr zone=mail_limit:10m rate=10r/s;
+
+server {
+    listen 80;
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html index.htm;
+
+    # 允许较大的请求体（邮件正文可能含 HTML）
+    client_max_body_size 10m;
+
+    # 禁止访问敏感文件
+    location ~ /\. {
+        deny all;
+    }
+
+    # 邮件服务 API：经 Nginx 反代到内网 mail:8080，并注入服务端密钥
+    location ~ ^/(appointment|api/appointment)$ {
+        limit_req zone=mail_limit burst=20 nodelay;
+        proxy_pass http://mail:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-API-Key "${MAIL_API_KEY}";
+        proxy_read_timeout 60s;
+        proxy_connect_timeout 10s;
+    }
+
+    # 前端静态资源
+    location / {
+        if ($uri ~* \.html$) {
+            add_header Cache-Control "no-cache, must-revalidate" always;
+        }
+        if ($uri ~* \.[a-f0-9]\{8,\}\.(js|css|png|jpg|jpeg|gif|ico|svg|woff2?)$) {
+            add_header Cache-Control "public, max-age=31536000, immutable" always;
+        }
+        try_files $uri $uri/ /index.html;
+    }
+
+    error_page 500 502 503 504 /50x.html;
+    location = /50x.html {
+        root /usr/share/nginx/html;
+        add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+    }
+}
