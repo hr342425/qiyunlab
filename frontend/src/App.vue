@@ -60,7 +60,10 @@ watch(() => route.path, () => {
             <p>先进科学计算与工业仿真软件创新企业</p>
           </div>
         </div>
-        <p>© {{ new Date().getFullYear() }} 合肥栖云科技有限公司 版权所有</p>
+        <div class="footer-legal">
+          <p>© {{ new Date().getFullYear() }} 合肥栖云科技有限公司 版权所有</p>
+          <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">皖ICP备2026026351号-1</a>
+        </div>
       </div>
     </footer>
   </div>

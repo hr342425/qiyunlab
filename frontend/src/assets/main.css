@@ -186,6 +186,10 @@ main { flex: 1; }
 .footer-brand img { width: 46px; height: 46px; border-radius: 8px; object-fit: contain; }
 .footer-brand strong { color: white; }
 .footer-brand p, .footer-content > p { margin: 3px 0 0; font-size: 13px; }
+.footer-legal { display: grid; justify-items: end; gap: 4px; text-align: right; }
+.footer-legal p { margin: 0; font-size: 13px; }
+.footer-legal a { color: #aab9c7; font-size: 13px; transition: color .2s; }
+.footer-legal a:hover { color: white; }
 
 @media (max-width: 760px) {
   .container { width: min(100% - 28px, 1180px); }
@@ -230,4 +234,5 @@ main { flex: 1; }
   .carousel-arrows { display: none; }
   .section { padding: 64px 0; }
   .footer-content { align-items: flex-start; flex-direction: column; }
+  .footer-legal { justify-items: start; text-align: left; }
 }
