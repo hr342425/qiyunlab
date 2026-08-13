@@ -87,3 +87,4 @@ docker compose restart mail
   请求体包含 `name`、`company`、`phone`、`email`、`companyType`、`requirement`
 - `/api/appointment` 是预约接口的兼容路径
 - 预约表单的 `email` 是收件邮箱；不填写时使用 `MAIL_RECIPIENT`，默认发送到 `qykjlab@163.com`
+- 新版 nuVision 试用申请通过 `operatingSystem` 字段自动识别，完整请求结构见项目 `README.md`

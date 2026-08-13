@@ -51,8 +51,19 @@ def first_value(data, *names):
     return ""
 
 
+def list_value(data, *names):
+    for name in names:
+        value = data.get(name)
+        if value is not None:
+            if isinstance(value, list):
+                return [str(item).strip() for item in value if str(item).strip()]
+            value = str(value).strip()
+            return [value] if value else []
+    return []
+
+
 def appointment_details(data):
-    """Validate the demo request form and normalize its fields."""
+    """Validate and normalize the legacy appointment form."""
     name = first_value(data, "name", "姓名")
     company = first_value(data, "company", "companyName", "unitName", "单位名称")
     phone = first_value(data, "phone", "mobile", "手机号")
@@ -73,6 +84,7 @@ def appointment_details(data):
         raise ValueError("companyType or requirement is too long")
 
     return {
+        "form_type": "appointment",
         "name": name,
         "company": company,
         "phone": phone,
@@ -80,6 +92,140 @@ def appointment_details(data):
         "company_type": company_type or "未填写",
         "requirement": requirement or "未填写",
     }
+
+
+def trial_application_details(data):
+    """Validate and normalize the current nuVision trial form."""
+    required_fields = (
+        ("name", "name"),
+        ("phone", "phone"),
+        ("operatingSystem", "operatingSystem"),
+        ("dataSize", "dataSize"),
+        ("deployment", "deployment"),
+        ("loadTime", "loadTime"),
+        ("concurrencySupport", "concurrencySupport"),
+        ("usedAccelerator", "usedAccelerator"),
+        ("expectedLoadTime", "expectedLoadTime"),
+        ("expectedConcurrency", "expectedConcurrency"),
+    )
+    fields = {key: first_value(data, key) for key, _ in required_fields}
+    fields["dataTypes"] = list_value(data, "dataTypes")
+    fields["acceptableDeployment"] = list_value(data, "acceptableDeployment")
+    fields.update({
+        "operatingSystemOther": first_value(data, "operatingSystemOther"),
+        "deploymentOther": first_value(data, "deploymentOther"),
+        "dataTypesOther": first_value(data, "dataTypesOther"),
+        "acceptableDeploymentOther": first_value(data, "acceptableDeploymentOther"),
+        "departmentPosition": first_value(data, "departmentPosition"),
+        "organizationType": first_value(data, "organizationType"),
+        "industry": first_value(data, "industry"),
+        "industryOther": first_value(data, "industryOther"),
+        "systemUses": list_value(data, "systemUses"),
+        "systemUsesOther": first_value(data, "systemUsesOther"),
+        "recipient": first_value(data, "email", "to", "recipient") or DEFAULT_RECIPIENT,
+    })
+
+    missing = [key for key, _ in required_fields if not fields[key]]
+    if not fields["dataTypes"]:
+        missing.append("dataTypes")
+    if not fields["acceptableDeployment"]:
+        missing.append("acceptableDeployment")
+    if missing:
+        raise ValueError("missing required fields: " + ", ".join(missing))
+    if fields["operatingSystem"] == "其它" and not fields["operatingSystemOther"]:
+        raise ValueError("operatingSystemOther is required when operatingSystem is 其它")
+    if fields["deployment"] == "其它" and not fields["deploymentOther"]:
+        raise ValueError("deploymentOther is required when deployment is 其它")
+    if "其它" in fields["dataTypes"] and not fields["dataTypesOther"]:
+        raise ValueError("dataTypesOther is required when dataTypes includes 其它")
+    if "其它" in fields["acceptableDeployment"] and not fields["acceptableDeploymentOther"]:
+        raise ValueError("acceptableDeploymentOther is required when acceptableDeployment includes 其它")
+    if data.get("privacyAccepted") is not True:
+        raise ValueError("privacyAccepted must be true")
+    if not EMAIL_PATTERN.fullmatch(fields["recipient"]):
+        raise ValueError("email must be a valid email address")
+    if any(len(str(value)) > 5000 for value in fields.values() if isinstance(value, str)):
+        raise ValueError("form field is too long")
+    return fields
+
+
+def html_row(label, value):
+    if isinstance(value, list):
+        value = "、".join(value) if value else "未填写"
+    return (
+        '<tr><td style="padding:12px 14px;border-bottom:1px solid #e8edf3;'
+        'color:#718096;width:180px;vertical-align:top;">'
+        f"{escape(label)}</td><td style=\"padding:12px 14px;border-bottom:1px solid #e8edf3;"
+        f'color:#1f2937;font-weight:600;">{escape(str(value or "未填写"))}</td></tr>'
+    )
+
+
+def build_trial_application(data):
+    fields = trial_application_details(data)
+    labels = (
+        ("基础信息", (
+            ("您的称呼", "name"), ("联系电话", "phone"),
+        )),
+        ("现有系统基础信息", (
+            ("系统运行操作系统", "operatingSystem"),
+            ("操作系统补充说明", "operatingSystemOther"),
+            ("系统数据大小", "dataSize"),
+            ("系统现有部署方式", "deployment"),
+            ("部署方式补充说明", "deploymentOther"),
+            ("系统目前加载时间", "loadTime"),
+            ("系统数据类型", "dataTypes"),
+            ("数据类型补充说明", "dataTypesOther"),
+            ("系统是否支持多用户并发", "concurrencySupport"),
+            ("是否试用过其它加速软件", "usedAccelerator"),
+        )),
+        ("加速功能需求", (
+            ("期望的系统加载速度", "expectedLoadTime"),
+            ("期望的并发数量", "expectedConcurrency"),
+            ("可接受的部署方式", "acceptableDeployment"),
+            ("部署方式补充说明", "acceptableDeploymentOther"),
+        )),
+        ("辅助筛选信息", (
+            ("部门与职位", "departmentPosition"),
+            ("单位性质", "organizationType"),
+            ("系统所属行业", "industry"),
+            ("行业补充说明", "industryOther"),
+            ("系统主要用途", "systemUses"),
+            ("用途补充说明", "systemUsesOther"),
+        )),
+    )
+    plain_sections = []
+    html_sections = []
+    for section, section_fields in labels:
+        plain_sections.append(section)
+        rows = []
+        for label, key in section_fields:
+            value = fields[key]
+            if value:
+                plain_sections.append(f"{label}：{', '.join(value) if isinstance(value, list) else value}")
+                rows.append(html_row(label, value))
+        html_sections.append(
+            f'<div style="margin-top:24px;font-size:16px;font-weight:700;color:#10213d;">{section}</div>'
+            f'<table role="presentation" cellpadding="0" cellspacing="0" width="100%" '
+            'style="margin-top:10px;border:1px solid #e8edf3;border-radius:8px;'
+            'border-collapse:separate;border-spacing:0;overflow:hidden;">'
+            + "".join(rows) + "</table>"
+        )
+    plain = "nuVision 产品试用申请\n" + "=" * 28 + "\n" + "\n".join(plain_sections)
+    html = f"""<!doctype html>
+<html lang="zh-CN"><body style="margin:0;padding:0;background:#f3f6fa;font-family:Arial,'Microsoft YaHei',sans-serif;color:#1f2937;">
+  <div style="max-width:720px;margin:0 auto;padding:32px 16px;">
+    <div style="background:#10213d;border-radius:12px 12px 0 0;padding:26px 32px;">
+      <div style="font-size:13px;letter-spacing:2px;color:#8ec5ff;">PRODUCT TRIAL</div>
+      <div style="margin-top:8px;font-size:24px;line-height:1.4;font-weight:700;color:#ffffff;">nuVision 产品试用申请</div>
+      <div style="margin-top:6px;font-size:13px;color:#b8c7dc;">收到一条新的产品试用申请，请及时跟进</div>
+    </div>
+    <div style="background:#ffffff;border:1px solid #e4eaf1;border-top:0;border-radius:0 0 12px 12px;padding:8px 32px 28px;">
+      {''.join(html_sections)}
+      <div style="margin-top:26px;padding-top:16px;border-top:1px solid #edf1f5;font-size:12px;line-height:1.7;color:#9aa6b5;">此邮件由栖云科技官网 nuVision 试用申请表单自动发送。</div>
+    </div>
+  </div>
+</body></html>"""
+    return fields["recipient"], f"nuVision 产品试用申请 - {fields['name']}", plain, html
 
 
 def build_appointment(data):
@@ -168,7 +314,15 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:
             self._send_json(400, {"error": "invalid json"})
             return
-        if path in ("/appointment", "/api/appointment"):
+        if path in ("/appointment", "/api/appointment") and "operatingSystem" in data:
+            try:
+                to, subject, content, html_content = build_trial_application(data)
+            except ValueError as e:
+                self._send_json(400, {"error": str(e)})
+                return
+            html = True
+            email_content = html_content
+        elif path in ("/appointment", "/api/appointment"):
             try:
                 to, subject, content, html_content = build_appointment(data)
             except ValueError as e:

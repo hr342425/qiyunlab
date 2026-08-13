@@ -41,9 +41,42 @@ curl -X POST http://<服务器IP>/appointment \
   }'
 ```
 
-`/appointment` 对应前端预约产品演示表单。`name`、`company`、`phone` 必填；
-`email` 是收件邮箱，不填写时使用服务器 `.env` 中的 `MAIL_RECIPIENT`（默认
-`qykjlab@163.com`）。表单内容会整理成邮件正文发送。
+`/appointment` 同时兼容原预约表单和新版 nuVision 产品试用申请表单。新版表单
+请求示例：
+
+```json
+{
+  "name": "张三",
+  "phone": "13800138000",
+  "operatingSystem": "Windows",
+  "operatingSystemOther": "",
+  "dataSize": "100–500G",
+  "deployment": "本地部署",
+  "deploymentOther": "",
+  "dataTypes": ["BIM 模型数据", "地图数据"],
+  "dataTypesOther": "",
+  "loadTime": "2–5 分钟",
+  "concurrencySupport": "是",
+  "usedAccelerator": "否",
+  "expectedLoadTime": "1–10 秒",
+  "expectedConcurrency": "50–100",
+  "acceptableDeployment": ["软硬一体本地部署", "云端部署"],
+  "acceptableDeploymentOther": "",
+  "departmentPosition": "技术部 / 项目经理",
+  "organizationType": "私营企业",
+  "industry": "交通、工民建",
+  "industryOther": "",
+  "systemUses": ["项目设计及优化管理", "项目施工管理"],
+  "systemUsesOther": "",
+  "privacyAccepted": true
+}
+```
+
+网页当前没有邮箱字段，因此邮件默认发送到服务器 `.env` 中的 `MAIL_RECIPIENT`
+（`qykjlab@163.com`）。如后续增加邮箱输入，可以传 `email` 指定收件邮箱。
+
+所有页面标记 `*` 的字段均由接口校验；选中“其它”时，对应的 `*Other` 字段必须填写。
+邮件按基础信息、系统基础、加速需求、辅助筛选四部分生成 HTML 排版。
 
 字段别名也兼容：`姓名`、`单位名称`、`手机号`、`邮箱`、`单位类型`、`需求简述`。
 
