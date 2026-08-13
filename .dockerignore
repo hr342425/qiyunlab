@@ -1,0 +1,12 @@
+.git
+.gitignore
+.env
+.env.example
+deploy
+scripts
+docs
+README.md
+*.md
+.idea
+__pycache__
+*.pyc

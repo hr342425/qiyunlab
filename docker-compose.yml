@@ -1,0 +1,12 @@
+services:
+  mail:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ${QIYUNLAB_IMAGE:-qiyunlab-mail:latest}
+    container_name: ${QIYUNLAB_CONTAINER_NAME:-qiyunlab-mail}
+    restart: unless-stopped
+    ports:
+      - "${MAIL_SERVICE_PORT:-8080}:8080"
+    env_file:
+      - .env
