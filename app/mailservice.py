@@ -6,6 +6,7 @@ import logging
 import smtplib
 import ssl
 import re
+from html import escape
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -25,12 +26,13 @@ log = logging.getLogger("mailservice")
 EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
 
-def send_email(to, subject, content, html=False):
+def send_email(to, subject, content, html=False, plain_content=None):
     msg = MIMEMultipart("alternative")
     msg["From"] = SENDER
     msg["To"] = to
     msg["Subject"] = subject
     if html:
+        msg.attach(MIMEText(plain_content or "", "plain", "utf-8"))
         msg.attach(MIMEText(content, "html", "utf-8"))
     else:
         msg.attach(MIMEText(content, "plain", "utf-8"))
@@ -49,8 +51,8 @@ def first_value(data, *names):
     return ""
 
 
-def build_appointment(data):
-    """Validate the demo request form and turn it into an email payload."""
+def appointment_details(data):
+    """Validate the demo request form and normalize its fields."""
     name = first_value(data, "name", "姓名")
     company = first_value(data, "company", "companyName", "unitName", "单位名称")
     phone = first_value(data, "phone", "mobile", "手机号")
@@ -70,17 +72,62 @@ def build_appointment(data):
     if len(company_type) > 100 or len(requirement) > 5000:
         raise ValueError("companyType or requirement is too long")
 
+    return {
+        "name": name,
+        "company": company,
+        "phone": phone,
+        "recipient": recipient,
+        "company_type": company_type or "未填写",
+        "requirement": requirement or "未填写",
+    }
+
+
+def build_appointment(data):
+    """Build the plain-text fallback and HTML email for the demo form."""
+    fields = appointment_details(data)
     content = "\n".join((
         "预约产品演示表单",
         "=" * 24,
-        f"姓名：{name}",
-        f"单位名称：{company}",
-        f"手机号：{phone}",
-        f"邮箱：{recipient}",
-        f"单位类型：{company_type or '未填写'}",
-        f"需求简述：{requirement or '未填写'}",
+        f"姓名：{fields['name']}",
+        f"单位名称：{fields['company']}",
+        f"手机号：{fields['phone']}",
+        f"邮箱：{fields['recipient']}",
+        f"单位类型：{fields['company_type']}",
+        f"需求简述：{fields['requirement']}",
     ))
-    return recipient, f"预约产品演示 - {name} - {company}", content
+    table_rows = "".join(
+        f'<tr><td style="padding:13px 16px;border-bottom:1px solid #e8edf3;'
+        f'color:#718096;width:92px;vertical-align:top;">{label}</td>'
+        f'<td style="padding:13px 16px;border-bottom:1px solid #e8edf3;'
+        f'color:#1f2937;font-weight:600;">{escape(value)}</td></tr>'
+        for label, value in (
+            ("姓名", fields["name"]),
+            ("单位名称", fields["company"]),
+            ("手机号", fields["phone"]),
+            ("联系邮箱", fields["recipient"]),
+            ("单位类型", fields["company_type"]),
+        )
+    )
+    html_content = f"""<!doctype html>
+<html lang="zh-CN"><body style="margin:0;padding:0;background:#f3f6fa;font-family:Arial,'Microsoft YaHei',sans-serif;color:#1f2937;">
+  <div style="max-width:680px;margin:0 auto;padding:32px 16px;">
+    <div style="background:#10213d;border-radius:12px 12px 0 0;padding:26px 32px;">
+      <div style="font-size:13px;letter-spacing:2px;color:#8ec5ff;">Qiyun Technology</div>
+      <div style="margin-top:8px;font-size:24px;line-height:1.4;font-weight:700;color:#ffffff;">预约产品演示</div>
+      <div style="margin-top:6px;font-size:13px;color:#b8c7dc;">收到一条新的产品演示预约申请</div>
+    </div>
+    <div style="background:#ffffff;border:1px solid #e4eaf1;border-top:0;border-radius:0 0 12px 12px;padding:28px 32px;">
+      <div style="font-size:16px;font-weight:700;color:#10213d;margin-bottom:14px;">联系人信息</div>
+      <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border:1px solid #e8edf3;border-radius:8px;border-collapse:separate;border-spacing:0;overflow:hidden;">
+        {table_rows}
+      </table>
+      <div style="margin-top:26px;font-size:16px;font-weight:700;color:#10213d;">需求简述</div>
+      <div style="margin-top:12px;padding:16px;background:#f7f9fc;border-left:4px solid #ff704d;border-radius:4px;color:#4a5568;line-height:1.75;white-space:pre-wrap;">{escape(fields['requirement'])}</div>
+      <div style="margin-top:26px;padding-top:16px;border-top:1px solid #edf1f5;font-size:12px;line-height:1.7;color:#9aa6b5;">此邮件由栖云科技官网预约表单自动发送，请及时联系客户。</div>
+    </div>
+  </div>
+</body></html>"""
+    return fields["recipient"], f"预约产品演示 - {fields['name']} - {fields['company']}", content, html_content
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -123,16 +170,18 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path in ("/appointment", "/api/appointment"):
             try:
-                to, subject, content = build_appointment(data)
+                to, subject, content, html_content = build_appointment(data)
             except ValueError as e:
                 self._send_json(400, {"error": str(e)})
                 return
-            html = False
+            html = True
+            email_content = html_content
         else:
             subject = str(data.get("subject", "")).strip()
             content = data.get("content", "")
             html = bool(data.get("html", False))
             to = str(data.get("to", DEFAULT_RECIPIENT)).strip()
+            email_content = content
         if not subject or not content or not to:
             self._send_json(400, {"error": "subject, content and to are required"})
             return
@@ -140,7 +189,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(400, {"error": "payload too large"})
             return
         try:
-            send_email(to, subject, content, html)
+            send_email(to, subject, email_content, html, content)
             log.info("email sent to %s subject=%r", to, subject[:80])
             self._send_json(200, {"status": "sent", "to": to})
         except Exception as e:
