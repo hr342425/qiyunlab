@@ -51,6 +51,18 @@ server {
         deny all;
     }
 
+    location = /healthz {
+        access_log off;
+        add_header Content-Type text/plain;
+        return 200 "ok\n";
+    }
+
+    location = /health {
+        access_log off;
+        add_header Content-Type text/plain;
+        return 200 "ok\n";
+    }
+
     # 邮件服务 API 反代（Nginx 服务端注入密钥）
     location ~ ^/(appointment|api/appointment)$ {
         limit_req zone=mail_limit burst=20 nodelay;
