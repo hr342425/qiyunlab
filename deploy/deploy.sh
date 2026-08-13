@@ -4,7 +4,7 @@ set -euo pipefail
 APP_DIR="${APP_DIR:-/opt/qiyunlab/app}"
 BRANCH="${BRANCH:-main}"
 FORCE_SYNC="${FORCE_SYNC:-0}"
-HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:8080/health}"
+HEALTH_URL="${HEALTH_URL:-http://127.0.0.1/health}"
 
 log() {
   printf '[deploy] %s\n' "$*"

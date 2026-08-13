@@ -61,7 +61,7 @@ vim .env   # 填入真实 SMTP 授权码、收件人、API Key
 | `APP_DIR` | `/opt/qiyunlab/app` | 服务器上仓库所在目录 |
 | `BRANCH` | `main` | 要部署的分支 |
 | `FORCE_SYNC` | `0` | 设为 `1` 时强制硬重置到远端 |
-| `HEALTH_URL` | `http://127.0.0.1:8080/health` | 健康检查地址 |
+| `HEALTH_URL` | `http://127.0.0.1/health` | 健康检查地址（经 nginx 80） |
 
 ## 运维命令
 
@@ -71,9 +71,16 @@ docker compose logs -f mail
 docker compose restart mail
 ```
 
+## 架构与端口
+
+- 公网只暴露 **80 端口**（80 在安全组默认放行）
+- Nginx 容器（`qiyunlab-nginx`）监听 80，反代到内部 `mail:8080`
+- 邮件服务容器（`qiyunlab-mail`）只在容器内部网络监听 8080，不直接暴露公网
+- 安全组只需放行 80 即可，无需放行 8080
+
 ## 接口说明
 
-- 健康检查：`GET /health`
-- 发送邮件：`POST /send`，请求头 `X-API-Key: <token>`，
+- 健康检查：`GET http://<IP>/health`（经 nginx）
+- 发送邮件：`POST http://<IP>/send`，请求头 `X-API-Key: <token>`，
   请求体 `{"subject":"标题","content":"正文","html":false}`
 - 默认收件人为 `MAIL_RECIPIENT` 指定地址；可在请求体加 `"to": "xxx@example.com"` 临时改收件人。
