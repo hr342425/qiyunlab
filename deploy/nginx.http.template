@@ -1,22 +1,35 @@
-# 限流：同一 IP 限速（防表单刷垃圾邮件）。放在 http 上下文（conf.d 在 http 内）
 limit_req_zone $binary_remote_addr zone=mail_limit:10m rate=10r/s;
 
 server {
     listen 80;
-    server_name _;
+    server_name __SERVER_NAMES__;
 
     root /usr/share/nginx/html;
     index index.html index.htm;
 
-    # 允许较大的请求体（邮件正文可能含 HTML）
+    charset utf-8;
+    server_tokens off;
     client_max_body_size 10m;
+
+    # Let's Encrypt HTTP-01 校验
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+        default_type text/plain;
+        try_files $uri =404;
+    }
+
+    location = /healthz {
+        access_log off;
+        add_header Content-Type text/plain;
+        return 200 "ok\n";
+    }
 
     # 禁止访问敏感文件
     location ~ /\. {
         deny all;
     }
 
-    # 邮件服务 API：经 Nginx 反代到内网 mail:8080，并注入服务端密钥
+    # 邮件服务 API 反代（Nginx 服务端注入密钥）
     location ~ ^/(appointment|api/appointment)$ {
         limit_req zone=mail_limit burst=20 nodelay;
         proxy_pass http://mail:8080;
@@ -25,7 +38,7 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-API-Key "${MAIL_API_KEY}";
+        proxy_set_header X-API-Key "__MAIL_API_KEY__";
         proxy_read_timeout 60s;
         proxy_connect_timeout 10s;
     }

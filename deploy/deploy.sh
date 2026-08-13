@@ -32,6 +32,10 @@ else
   git pull --ff-only origin "$BRANCH"
 fi
 
+# 渲染 Nginx 配置（render-nginx.sh 根据 .env 的 MAIL_HTTPS 自动选择 http/https）
+log "rendering nginx config"
+"$APP_DIR/scripts/render-nginx.sh"
+
 log "building images (mail + nginx)"
 docker compose build mail nginx
 
@@ -51,4 +55,5 @@ done
 echo "Health check failed: $HEALTH_URL" >&2
 docker compose ps >&2 || true
 docker compose logs --tail=80 mail >&2 || true
+docker compose logs --tail=80 nginx >&2 || true
 exit 1

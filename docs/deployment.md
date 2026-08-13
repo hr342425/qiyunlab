@@ -95,3 +95,47 @@ docker compose restart mail
 - `/api/appointment` 是预约接口的兼容路径
 - 预约表单的 `email` 是收件邮箱；不填写时使用 `MAIL_RECIPIENT`，默认发送到 `qykjlab@163.com`
 - 新版 nuVision 试用申请通过 `operatingSystem` 字段自动识别，完整请求结构见项目 `README.md`
+
+## HTTPS（Let's Encrypt + 自动续期）
+
+前置条件：**域名必须能通过公网访问到服务器 80 端口**。若域名被云厂商 ICP 备案拦截
+（大陆服务器 + 未备案域名返回 403），Let's Encrypt 的 HTTP-01 校验会失败，无法签发证书。
+
+### 首次签发
+
+```bash
+cd /opt/qiyunlab/app
+sudo bash scripts/setup-letsencrypt-https.sh \
+  -d qiyunlab.cc.cd \
+  -d www.qiyunlab.cc.cd \
+  -m you@example.com
+```
+
+脚本会自动：
+1. 安装 certbot（snap）
+2. 写入 .env（LETSENCRYPT_DIR、CERTBOT_WEBROOT、MAIL_PRIMARY_DOMAIN、MAIL_DOMAINS、MAIL_HTTPS）
+3. 先用 HTTP+ACME 配置启动，校验公网 ACME 路径
+4. 用 webroot 方式向 Let's Encrypt 签发证书
+5. 切换到 HTTPS 配置（80 重定向到 443 + 443 SSL）
+6. 写入续期 deploy 钩子（续期后 reload nginx）
+7. `certbot renew --dry-run` 自检
+
+### 自动续期
+
+- certbot 安装后自带 systemd 定时器 `certbot.timer`，每天检查，证书到期前自动续期
+- 续期成功后触发 `/etc/letsencrypt/renewal-hooks/deploy/reload-qiyunlab-nginx.sh` 重载 nginx
+
+### 手动续期/查看
+
+```bash
+sudo certbot renew --dry-run      # 测试续期
+sudo certbot certificates          # 查看证书
+systemctl status certbot.timer     # 查看续期定时器
+```
+
+### Nginx 配置说明
+
+- `deploy/nginx.http.template`：HTTP 阶段（ACME 校验 + 前端 + API 反代）
+- `deploy/nginx.https.template`：HTTPS 生产配置（80→443 重定向 + 443 SSL + 前端 + API 反代）
+- `scripts/render-nginx.sh`：根据 .env 渲染 `deploy/nginx.conf`（已 gitignore，含密钥，不进仓库）
+- `deploy.sh` 会自动调用渲染；`MAIL_HTTPS=1` 时渲染 HTTPS 配置
